@@ -4,7 +4,7 @@ An AI-powered pipeline that researches the competitive SERP landscape for any ke
 
 ---
 
-## Screenshots
+## DEMO
 
 **Pipeline in progress**
 ![Generating](assets/generating.png)
