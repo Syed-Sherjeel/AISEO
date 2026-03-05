@@ -1,5 +1,23 @@
-# AISEO
-AI-powered SEO content generation platform. An agent-based backend that analyzes SERP data, extracts competitive themes, and produces structured, publish-ready articles with metadata, keyword analysis, and linking strategies. Built with Python, Pydantic, and LLM orchestration. Includes job tracking and content quality validation.
+# SEO Article Generation Agent
+
+An AI-powered pipeline that researches the competitive SERP landscape for any keyword and produces a publish-ready, human-sounding article that follows SEO best practices.
+
+---
+
+## Screenshots
+
+**Pipeline in progress**
+![Generating](assets/generating.png)
+
+**Generated article title & introduction**
+![Title Output](assets/title_op.png)
+
+<table>
+  <tr>
+    <td><strong>FAQ section</strong><br/><img src="assets/faq.png" alt="FAQ"/></td>
+    <td><strong>Internal & external links</strong><br/><img src="assets/internal_external_links.png" alt="Links"/></td>
+  </tr>
+</table>
 
 ---
 
