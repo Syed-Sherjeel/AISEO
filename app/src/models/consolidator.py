@@ -5,7 +5,6 @@ class BlueprintSection(BaseModel):
     level: str                    
     topics_to_cover: list[str]    
     questions_to_answer: list[str] = []  
-    recommended_word_count: int   
 
 
 class ExternalLinkRecommendation(BaseModel):
@@ -26,7 +25,6 @@ class SEOMetadata(BaseModel):
     meta_description: str        
     primary_keyword: str
     secondary_keywords: list[str]
-    target_word_count: int
 
 
 class ContentBlueprint(BaseModel):
