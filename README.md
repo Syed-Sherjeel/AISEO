@@ -69,16 +69,22 @@ The `ContentBlueprint` is passed to a second Sonnet call configured specifically
 
 ## Engineering Roadmap
 
-### Job Persistence & Resumability
-> *Planned*
+> *Planned — current implementation runs the full pipeline in a single sequential process. The following describes the target architecture for durability and production readiness.*
 
-The pipeline currently runs end to end in a single process. The next engineering priority is breaking it into durable, resumable jobs. Each stage will write its output to a persistent store (Redis or Postgres) before the next stage begins. If the process crashes after SERP data is fetched but before scraping completes, the job resumes from where it left off rather than restarting from scratch. Planned checkpoint states:
+### Dev Architecture
+![Dev Architecture](assets/dev.png)
+
+The dev setup introduces job persistence without operational complexity. A FastAPI server accepts job submissions and hands them off to a background runner. Each pipeline stage writes its output to SQLite before the next stage begins, establishing five checkpoints:
 
 ```
-PENDING → SERP_FETCHED → PAGES_SCRAPED → ANALYSES_COMPLETE → BLUEPRINT_READY → ARTICLE_GENERATED → DONE
+PENDING → SERP_FETCHED → PAGES_SCRAPED → ANALYSES_COMPLETE → BLUEPRINT_READY → ARTICLE_GENERATED
 ```
 
-### Job Management API
-> *Planned*
+If the process crashes at any stage, `POST /jobs/{id}/resume` replays from the last successful checkpoint rather than restarting. Job status is available via `GET /jobs/{id}`. SQLite keeps the local setup dependency-free.
 
-A lightweight REST API for submitting generation jobs, polling status, and retrieving completed articles. Each job will have a unique ID, status, and timestamped stage transitions for observability.
+---
+
+### Prod Architecture
+![Prod Architecture](assets/prod.png)
+
+The production setup decouples job execution from the API server entirely. FastAPI enqueues jobs into Redis, and a Celery or ARQ worker pool picks them up independently — the API server can restart without affecting running jobs. Checkpoints are persisted to Postgres. Realtime stage updates are pushed to the frontend via Ably WebSocket events, eliminating polling entirely. The frontend subscribes to a per-job channel and receives status transitions as they happen.
