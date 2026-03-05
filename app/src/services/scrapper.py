@@ -2,6 +2,7 @@
 import trafilatura
 from bs4 import BeautifulSoup
 from firecrawl import FirecrawlApp
+from urllib.parse import urlparse
 
 from app.src.utils.env import get_firecrawl_api_key
 
@@ -39,7 +40,7 @@ def extract_content(html: str) -> dict:
 
 
 def extract_outbound_links(html: str, source_url: str) -> list[OutboundLink]:
-    from urllib.parse import urlparse
+    
     source_domain = urlparse(source_url).netloc
 
     soup = BeautifulSoup(html, "html.parser")
@@ -128,7 +129,7 @@ def run_scraping_pipeline(
     pages = []
 
     for result in serper_responses.results:
-        print(f"Scraping [{result.position}/10]: {result.link}")
+        print(f"Scraping [{result.position}/{len(serper_responses.results)}]: {result.link}")
         page = scrape_page(result, fc_app)
         pages.append(page)
 
