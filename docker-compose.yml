@@ -1,0 +1,50 @@
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"          # expose locally for debugging (redis-cli etc.)
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file: .env                 # loads all your API keys (ABLY, SERPER, etc.)
+    environment:                   # these override .env for container-specific values
+      REDIS_URL: redis://redis:6379
+      DB_PATH: /data/jobs.db
+    volumes:
+      - sqlite_data:/data
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: python -m arq app.src.pipeline.worker.WorkerSettings
+    env_file: .env                 # same — loads API keys
+    environment:                   # overrides just the infra vars
+      REDIS_URL: redis://redis:6379
+      DB_PATH: /data/jobs.db
+    volumes:
+      - sqlite_data:/data
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    # Scale workers independently:  docker compose up --scale worker=3
+    # (keep max_jobs=1 per worker process to avoid SQLite write contention)
+
+volumes:
+  sqlite_data:   # named volume — persists across container restarts

@@ -1,11 +1,15 @@
 import uuid
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
-from app.src.pipeline.runner import run_pipeline
+from ably import AblyRest
+from arq import ArqRedis
+
+from app.src.utils.env import get_ably_api_key
+from app.src.redis.depends import get_redis
 from .models import JobRequest, JobResponse
-from app.src.db import create_job, get_job, list_jobs, load_checkpoint, STAGE_ORDER
+from app.src.db import create_job, get_job, list_jobs, load_checkpoint, STAGE_ORDER, last_completed_stage
 
 
 logging.basicConfig(level=logging.INFO)
@@ -16,28 +20,30 @@ _executor = ThreadPoolExecutor(max_workers=1)
 
 router = APIRouter()
 
-
 @router.post("/jobs", response_model=JobResponse, status_code=201)
-def submit_job(req: JobRequest, background_tasks: BackgroundTasks):
-    """Create a new job and start the pipeline in the background."""
+async def submit_job(req: JobRequest, redis: ArqRedis = Depends(get_redis)):
+    """Persist the job row and enqueue a task to the ARQ worker pool."""
     job_id = str(uuid.uuid4())
     create_job(job_id, req.query, req.word_count)
-    background_tasks.add_task(_executor.submit, run_pipeline, job_id)
+    await redis.enqueue_job("pipeline_task", job_id)
+    log.info("enqueued job %s", job_id)
     return get_job(job_id)
 
 
 @router.post("/jobs/{job_id}/resume", response_model=JobResponse)
-def resume_job(job_id: str, background_tasks: BackgroundTasks):
-    """
-    Replay the pipeline from the last successful checkpoint.
-    Safe to call on any non-running job.
-    """
+async def resume_job(job_id: str, redis: ArqRedis = Depends(get_redis)):
+    """Re-enqueue a failed or stuck job. Pipeline skips completed stages."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
-    if job["status"] not in ("FAILED", "PENDING", "ARTICLE_GENERATED"):
-        raise HTTPException(409, f"Job is currently in state '{job['status']}' — wait before resuming")
-    background_tasks.add_task(_executor.submit, run_pipeline, job_id)
+    if job["status"] not in ("FAILED", "PENDING", "RETRYING"):
+        raise HTTPException(
+            409,
+            f"Cannot resume a job in state '{job['status']}'. "
+            "Only FAILED, RETRYING or PENDING jobs can be resumed.",
+        )
+    await redis.enqueue_job("pipeline_task", job_id)
+    log.info("re-enqueued job %s from stage '%s'", job_id, last_completed_stage(job_id))
     return get_job(job_id)
 
 
@@ -51,27 +57,35 @@ def job_status(job_id: str):
 
 @router.get("/jobs/{job_id}/result")
 def job_result(job_id: str):
-    """Return the final article payload once the job is complete."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
     if job["status"] != "ARTICLE_GENERATED":
-        raise HTTPException(409, f"Job not complete yet — current status: {job['status']}")
+        raise HTTPException(409, f"Job not complete — current status: {job['status']}")
     return load_checkpoint(job_id, "ARTICLE_GENERATED")
 
 
 @router.get("/jobs/{job_id}/checkpoint/{stage}")
 def get_checkpoint(job_id: str, stage: str):
-    """Inspect any intermediate checkpoint for debugging."""
-    
     if stage not in STAGE_ORDER:
-        raise HTTPException(400, f"Unknown stage. Valid stages: {STAGE_ORDER}")
+        raise HTTPException(400, f"Valid stages: {STAGE_ORDER}")
     data = load_checkpoint(job_id, stage)
     if data is None:
-        raise HTTPException(404, f"No checkpoint for stage '{stage}'")
+        raise HTTPException(404, f"No checkpoint saved for stage '{stage}' yet")
     return data
 
 
 @router.get("/jobs", response_model=list[JobResponse])
 def get_all_jobs():
     return list_jobs()
+
+@router.get("/ably-token")
+async def ably_token():
+    """
+    Return a short-lived Ably token request so the frontend never sees the
+    raw API key. The JS client calls this once on load.
+    """
+    
+    ably = AblyRest(get_ably_api_key())
+    token_request = await ably.auth.create_token_request_async()
+    return token_request

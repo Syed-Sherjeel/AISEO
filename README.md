@@ -35,6 +35,7 @@ Create a `.env` file in the root directory:
 SERPER_API_KEY=       # serper.dev
 FIRECRAWL_API_KEY=    # firecrawl.dev
 ANTHROPIC_API_KEY=    # platform.claude.com
+ABLY_API_KEY=         # ably.com
 ```
 
 ---

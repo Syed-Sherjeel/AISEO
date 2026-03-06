@@ -3,9 +3,11 @@ import sqlite3
 from pathlib import Path
 from contextlib import contextmanager
 
+from app.src.config import settings
+
 from .schema import SCHEMA
 
-DB_PATH = Path("jobs.db")
+DB_PATH = Path(settings.db_path)
 
 @contextmanager
 def get_conn():

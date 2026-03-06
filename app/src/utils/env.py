@@ -19,3 +19,9 @@ def get_anthropic_api_key() -> str:
     if not anthropic_api_key:
         raise ValueError("ANTHROPIC_API_KEY is not set")
     return anthropic_api_key
+
+def get_ably_api_key() -> str:
+    ably_api_key = os.getenv("ABLY_API_KEY")
+    if not ably_api_key:
+        raise ValueError("ABLY_API_KEY is not set")
+    return ably_api_key
