@@ -14,18 +14,22 @@ from app.src.db import (
 )
 from app.src.events import push_stage
 
-MAX_TRIES   = 5
-RETRY_DELAY = [30, 60, 120, 300]  
 from app.src.services.serper import get_serper_responses
 from app.src.services.scrapper import run_scraping_pipeline
 from app.src.services.prelim import run_haiku_analysis
 from app.src.services.consolidator import run_consolidator
 from app.src.services.writer import run_writer
 
-log = logging.getLogger(__name__)
+from app.src.models import ContentBlueprint, PageAnalysis, ScrapedPage, SerperResponses, GeneratedArticle
+
+MAX_TRIES   = 5
+RETRY_DELAY = [30, 60, 120, 300]  
+
 
 log = logging.getLogger(__name__)
 
+
+model_map = {"SERP_FETCHED": SerperResponses, "PAGES_SCRAPED": ScrapedPage, "PRELIM_ANALYSES_COMPLETE": PageAnalysis, "BLUEPRINT_READY": ContentBlueprint, "ARTICLE_GENERATED": GeneratedArticle}
 
 def _dump(obj) -> dict:
     """Serialize pydantic model to dict, embedding the class path for reconstruction."""
@@ -46,7 +50,7 @@ def _dump(obj) -> dict:
     return obj
 
 
-def _load(data):
+def _load(data, stage):
     """
     Reconstruct whatever pydantic model was originally dumped.
     Works on any nesting depth — no need to specify the class at call time.
@@ -54,10 +58,9 @@ def _load(data):
     if data is None:
         return None
     if isinstance(data, dict):
-        fields = {k: (type(v), v) for k, v in data.items()}
-        data = create_model("Reloaded", **fields)
+        model = model_map.get(stage)
+        data = model.model_validate(data)
     
-    print("OMG",data)
     return data
 
 
@@ -92,7 +95,7 @@ async def pipeline_task(ctx: dict, job_id: str) -> None:
             await _transition(job_id, "SERP_FETCHED")
         else:
             log.info("job %s — SERP_FETCHED (cached)", job_id)
-            responses = _load(load_checkpoint(job_id, "SERP_FETCHED"))
+            responses = _load(load_checkpoint(job_id, "SERP_FETCHED"), "SERP_FETCHED")
 
         if start_idx < STAGE_ORDER.index("PAGES_SCRAPED"):
             log.info("job %s — PAGES_SCRAPED", job_id)
@@ -101,8 +104,7 @@ async def pipeline_task(ctx: dict, job_id: str) -> None:
             await _transition(job_id, "PAGES_SCRAPED")
         else:
             log.info("job %s — PAGES_SCRAPED (cached)", job_id)
-            pages = _load(load_checkpoint(job_id, "PAGES_SCRAPED"))
-
+            pages = _load(load_checkpoint(job_id, "PAGES_SCRAPED"), "PAGES_SCRAPED")
         if start_idx < STAGE_ORDER.index("PRELIM_ANALYSES_COMPLETE"):
             log.info("job %s — PRELIM_ANALYSES_COMPLETE", job_id)
             analyses = await run_haiku_analysis(pages, query)
@@ -110,7 +112,7 @@ async def pipeline_task(ctx: dict, job_id: str) -> None:
             await _transition(job_id, "PRELIM_ANALYSES_COMPLETE")
         else:
             log.info("job %s — PRELIM_ANALYSES_COMPLETE (cached)", job_id)
-            analyses = _load(load_checkpoint(job_id, "PRELIM_ANALYSES_COMPLETE"))
+            analyses = _load(load_checkpoint(job_id, "PRELIM_ANALYSES_COMPLETE"), "PRELIM_ANALYSES_COMPLETE")
 
         if start_idx < STAGE_ORDER.index("BLUEPRINT_READY"):
             log.info("job %s — BLUEPRINT_READY", job_id)
@@ -119,7 +121,7 @@ async def pipeline_task(ctx: dict, job_id: str) -> None:
             await _transition(job_id, "BLUEPRINT_READY")
         else:
             log.info("job %s — BLUEPRINT_READY (cached)", job_id)
-            blueprint = _load(load_checkpoint(job_id, "BLUEPRINT_READY"))
+            blueprint = _load(load_checkpoint(job_id, "BLUEPRINT_READY"), "BLUEPRINT_READY")
 
         if start_idx < STAGE_ORDER.index("ARTICLE_GENERATED"):
             log.info("job %s — ARTICLE_GENERATED", job_id)

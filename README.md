@@ -23,11 +23,6 @@ An AI-powered pipeline that researches the competitive SERP landscape for any ke
 
 ## Setup
 
-**Install dependencies**
-```bash
-pip install -r requirements.txt
-```
-
 **Environment variables**
 
 Create a `.env` file in the root directory:
@@ -36,6 +31,12 @@ SERPER_API_KEY=       # serper.dev
 FIRECRAWL_API_KEY=    # firecrawl.dev
 ANTHROPIC_API_KEY=    # platform.claude.com
 ABLY_API_KEY=         # ably.com
+```
+
+**Docker compose**
+We are using docker compose to unify and ease deployement of arq, redis, python service.
+```
+ docker compose up --build
 ```
 
 ---
